@@ -1,0 +1,26 @@
+{
+  "name": "persistent-rx-websocket",
+  "version": "1.0.0",
+  "description": "WebSocket client that re-connects indefinitely",
+  "main": "dist/index.js",
+  "author": "Quang Tran",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "build": "tsc src/index.ts",
+    "test": "jest --passWithNoTests",
+    "test:watch": "jest --passWithNoTests --watch"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.9.0",
+    "@babel/preset-env": "^7.9.5",
+    "@babel/preset-typescript": "^7.9.0",
+    "@types/jest": "^25.2.1",
+    "babel-jest": "^25.3.0",
+    "jest": "^25.3.0",
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {
+    "rxjs": "^6.5.5"
+  }
+}
