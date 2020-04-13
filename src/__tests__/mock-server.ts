@@ -4,18 +4,25 @@ import WebSocket from "ws";
 export const createWebSocketServer = (
   port: number,
   openInterval: number = 200
-): WebSocket.Server => {
-  const server = new WebSocket.Server({ host: "localhost", port });
+): [WebSocket.Server, () => void] => {
+  const server = new WebSocket.Server({ host: "localhost", port })
 
   server.on("connection", (socket: WebSocket): void => {
-    socket.on("open", (): void => {
-      setTimeout((): void => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.close();
-        }
-      }, openInterval);
-    });
-  });
+    setTimeout((): void => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close()
+      }
+    }, openInterval)
+  })
 
-  return server;
+  server.on("listening", (): void =>
+    console.log(`[WebSocket Server] WS server listening at ws://localhost:${port}`)
+  )
+
+  const close = (): void => {
+    server.clients.forEach((socket: WebSocket): void => socket.close())
+    server.close()
+  }
+
+  return [server, close];
 };
