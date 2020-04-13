@@ -1,4 +1,4 @@
-import { BehaviorSubject, race, Subject, Subscription, timer } from "rxjs"
+import { BehaviorSubject, race, Subject, Subscription, timer, Observable } from "rxjs"
 import { take } from 'rxjs/operators'
 import { webSocket, WebSocketSubject, WebSocketSubjectConfig } from "rxjs/webSocket"
 import WebSocket from 'ws'
@@ -16,17 +16,15 @@ export class PersistentRxWebSocket<D extends RxWebSocketMessage> {
   public static DEFAULT_WAIT_INTERVAL = 10000
 
   private socket: WebSocketSubject<D>
-  private socketSubscription: Subscription | undefined
 
+  // TODO More elegant solution than Subjectf or data & status? Values only flow uni-directionaly.
   private data: Subject<D>
   private status: BehaviorSubject<ConnectionStatus>
-  private command: Subject<Command>
   private waitInterval: number
 
   constructor(urlConfigOrSource: string | WebSocketSubjectConfig<D> & { waitInterval?: number }) {
     this.data = new Subject<D>()
     this.status = new BehaviorSubject<ConnectionStatus>('init')
-    this.command = new Subject<Command>()
 
     this.waitInterval = typeof(urlConfigOrSource) === 'string'
       ? PersistentRxWebSocket.DEFAULT_WAIT_INTERVAL
@@ -43,55 +41,24 @@ export class PersistentRxWebSocket<D extends RxWebSocketMessage> {
         next: (): void => this.status.next('disconnected')
       }
     })
+  }
 
-    // Setup retry logic
-    this.command.subscribe((cmd: Command): void => {
-      // console.log("PersistentRxWebSocket -> cmd", cmd)
-      switch (cmd) {
-        case 'start': {
-          if (!this.socketSubscription) {
-            this.socketSubscription = this.socket.subscribe({
-              next: (value: D): void => this.data.next(value),
-              error: (): void => {
-                this.socketSubscription = undefined
-
-                // Retry after waitInterval
-                // If "stop" command is issued, stop retry attempt.
-                // If "start" command is issued, execute immediately
-                race(timer(this.waitInterval).pipe(take(1)), this.command).subscribe(
-                  this.start.bind(this)
-                )
-              }
-            })
-          } // else, do not start aka subscribe again if already started.
-
-          break
-        }
-
-        case 'stop': {
-          if (this.socketSubscription) {
-            this.socketSubscription.unsubscribe()
-            this.socketSubscription = undefined
-          } // else, do not close again.
-
-          break
-        }
+  public init(): void {
+    this.socket.subscribe(
+      (value: D): void => this.data.next(value),
+      (): void => {
+        // Retry after waitInterval
+        timer(this.waitInterval).pipe(take(1)).subscribe(this.init.bind(this))
       }
-    })
-  }
-
-  public start(): void {
-    this.command.next('start')
-  }
-
-  public stop(): void {
-    this.command.next('stop')
+    )
   }
 
   public send(value: D): void {
-    if (this.socketSubscription) {
-      this.socket.next(value)
-    }
+    this.socket.next(value)
+  }
+
+  public get statusObservable(): Observable<ConnectionStatus> {
+    return this.status.asObservable()
   }
 
   public subscribeToStatus(
@@ -99,7 +66,11 @@ export class PersistentRxWebSocket<D extends RxWebSocketMessage> {
     error?: (error: any) => void,
     complete?: () => void
   ): Subscription {
-    return this.status.asObservable().subscribe(next, error, complete)
+    return this.statusObservable.subscribe(next, error, complete)
+  }
+
+  public get dataObservable(): Observable<D> {
+    return this.data.asObservable()
   }
 
   public subscribeToData(
@@ -107,6 +78,6 @@ export class PersistentRxWebSocket<D extends RxWebSocketMessage> {
     error?: (error: any) => void,
     complete?: () => void
   ): Subscription {
-    return this.data.asObservable().subscribe(next, error, complete)
+    return this.dataObservable.subscribe(next, error, complete)
   }
 }
